@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: front-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
+
 env:
   FRONT_FOLDER: ./front
 
@@ -21,6 +25,7 @@ jobs:
   detect-changes:
     name: Detect Front Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       front: ${{ steps.filter.outputs.front }}
     steps:
@@ -44,6 +49,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -64,6 +70,7 @@ jobs:
     needs: [detect-changes, install]
     if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -80,6 +87,7 @@ jobs:
     needs: [detect-changes, install]
     if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -100,6 +108,7 @@ jobs:
     needs: [detect-changes, install]
     if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -116,6 +125,7 @@ jobs:
     needs: [detect-changes, install]
     if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -132,6 +142,7 @@ jobs:
     needs: [detect-changes, install]
     if: needs.detect-changes.outputs.front == 'true' && ((github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
