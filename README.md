@@ -1,5 +1,7 @@
 # SlotFinder 3
 
+Test number 1
+
 No more endless discussions to find a date: let us suggest the best times that suit everyone.
 
 ## Development Setup
