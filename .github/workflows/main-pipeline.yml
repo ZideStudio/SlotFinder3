@@ -1,4 +1,4 @@
-name: Release
+name: Main Pipeline
 
 on:
   push:
@@ -6,17 +6,89 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: main-pipeline-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  IMAGE_NAME: slotfinder
+  PRD_DOMAIN: slotfinder.fr
+
 jobs:
+  back-ci:
+    name: Back CI
+    uses: ./.github/workflows/back-build.yaml
+    with:
+      base_ref: ${{ github.event.before }}
+    secrets: inherit
+
+  front-ci:
+    name: Front CI
+    uses: ./.github/workflows/front-build.yaml
+    with:
+      base_ref: ${{ github.event.before }}
+    secrets: inherit
+
+  docker-ci:
+    name: Docker CI
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      base_ref: ${{ github.event.before }}
+    secrets: inherit
+
+  build-production:
+    name: Build Production Images
+    needs: [back-ci, front-ci, docker-ci]
+    runs-on: self-hosted
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create JWT keys for production
+        run: |
+          mkdir -p back/config/jwt
+          echo "${{ secrets.JWT_PRIVATE_KEY_PRD }}" > back/config/jwt/private.pem
+          echo "${{ secrets.JWT_PUBLIC_KEY_PRD }}" > back/config/jwt/public.pem
+          chmod 644 back/config/jwt/private.pem
+          chmod 644 back/config/jwt/public.pem
+
+      - name: Create .env for frontend production
+        run: echo "${{ secrets.FRONT_ENV_PRD }}" > .env
+
+      - name: Build Production Images
+        run: docker compose -f docker-compose-build-prd.yml build
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build-production
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env for backend production
+        run: echo "${{ secrets.BACK_ENV_PRD }}" > .env
+
+      - name: Deploy Production Services
+        run: |
+          export DOMAIN=${PRD_DOMAIN}
+          export FRONT_IMAGE=prd-${IMAGE_NAME}-front:${{ github.sha }}
+          export BACK_IMAGE=prd-${IMAGE_NAME}-back:${{ github.sha }}
+          docker compose -f docker-compose-prd.yml up -d
+        env:
+          COMPOSE_PROJECT_NAME: slotfinder-prd
+
   release:
     name: Create Release
+    needs: deploy-production
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -44,11 +116,9 @@ jobs:
           fi
 
           echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
-          echo "last_tag=${LAST_TAG}" >> "$GITHUB_OUTPUT"
           echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
-        id: changelog
         run: |
           RANGE="${{ steps.version.outputs.range }}"
           COMMITS=$(git log "${RANGE}" --pretty=format:"%s" --no-merges)
@@ -66,7 +136,6 @@ jobs:
           [ -n "$REFACTOR" ] && BODY="${BODY}## Refactoring\n${REFACTOR}\n\n"
           [ -n "$OTHER" ]    && BODY="${BODY}## Other Changes\n${OTHER}\n\n"
 
-          # Write to file to avoid multiline issues with GITHUB_OUTPUT
           printf "%b" "$BODY" > /tmp/changelog.md
 
       - name: Create tag and release
