@@ -17,16 +17,22 @@ jobs:
   back-ci:
     name: Back CI
     uses: ./.github/workflows/back-build.yaml
+    with:
+      base_ref: ${{ github.event.before }}
     secrets: inherit
 
   front-ci:
     name: Front CI
     uses: ./.github/workflows/front-build.yaml
+    with:
+      base_ref: ${{ github.event.before }}
     secrets: inherit
 
   docker-ci:
     name: Docker CI
     uses: ./.github/workflows/docker-build.yml
+    with:
+      base_ref: ${{ github.event.before }}
     secrets: inherit
 
   build-staging:

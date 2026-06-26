@@ -11,6 +11,12 @@ on:
   merge_group:
     branches: ["main"]
   workflow_call:
+    inputs:
+      base_ref:
+        description: 'Base SHA for change detection (used when called via workflow_call)'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -34,6 +40,7 @@ jobs:
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
+          base: ${{ inputs.base_ref }}
           filters: |
             docker:
               - 'docker-compose.dev.yml'
