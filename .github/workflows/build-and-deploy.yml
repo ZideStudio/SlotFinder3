@@ -1,126 +1,20 @@
 name: Build and Deploy
 
 on:
-  workflow_run:
-    workflows: ["Back Build", "Front Build", "Docker Build"]
-    branches: [develop]
-    types: [completed]
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
-  actions: read
 
 env:
   IMAGE_NAME: slotfinder
-  STG_DOMAIN: stg.slotfinder.fr
   PRD_DOMAIN: slotfinder.fr
 
 jobs:
-  gate:
-    name: Check CI gate
-    if: github.event_name == 'workflow_run'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: read
-    outputs:
-      should_deploy: ${{ steps.check.outputs.deploy }}
-    steps:
-      - name: Check all CI passed and skip renovate
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          AUTHOR="${{ github.event.workflow_run.head_commit.author.name }}"
-          if [ "$AUTHOR" = "renovate[bot]" ]; then
-            echo "Skipping CD: commit from renovate[bot]"
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          SHA="${{ github.event.workflow_run.head_sha }}"
-          for workflow in "Back Build" "Front Build" "Docker Build"; do
-            CONCLUSION=$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow "$workflow" \
-              --json conclusion,headSha \
-              --jq ".[] | select(.headSha == \"$SHA\") | .conclusion" \
-              --limit 5 | head -1)
-            if [ "$CONCLUSION" != "success" ] && [ "$CONCLUSION" != "skipped" ]; then
-              echo "Workflow '$workflow' not yet passed (conclusion: $CONCLUSION)"
-              echo "deploy=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          done
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
-
-  setup:
-    name: Setup
-    needs: gate
-    if: |
-      (github.event_name == 'workflow_run' && needs.gate.outputs.should_deploy == 'true') ||
-      startsWith(github.ref, 'refs/tags/v')
-    runs-on: self-hosted
-    timeout-minutes: 5
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-  build-staging:
-    name: Build Staging Images
-    needs: [gate, setup]
-    if: github.event_name == 'workflow_run' && needs.gate.outputs.should_deploy == 'true'
-    runs-on: self-hosted
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Create JWT keys for staging
-        run: |
-          mkdir -p back/config/jwt
-          echo "${{ secrets.JWT_PRIVATE_KEY_STG }}" > back/config/jwt/private.pem
-          echo "${{ secrets.JWT_PUBLIC_KEY_STG }}" > back/config/jwt/public.pem
-          chmod 644 back/config/jwt/private.pem
-          chmod 644 back/config/jwt/public.pem
-
-      - name: Create .env for frontend staging
-        run: echo "${{ secrets.FRONT_ENV_STG }}" > .env
-
-      - name: Build Staging Images
-        run: docker compose -f docker-compose-build-stg.yml build
-        env:
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
-
-  deploy-staging:
-    name: Deploy to Staging
-    needs: [gate, build-staging]
-    if: github.event_name == 'workflow_run' && needs.gate.outputs.should_deploy == 'true'
-    runs-on: self-hosted
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Create .env for backend staging
-        run: echo "${{ secrets.BACK_ENV_STG }}" > .env
-
-      - name: Deploy Staging Services
-        run: |
-          export DOMAIN=${STG_DOMAIN}
-          export FRONT_IMAGE=stg-${IMAGE_NAME}-front:${{ github.event.workflow_run.head_sha }}
-          export BACK_IMAGE=stg-${IMAGE_NAME}-back:${{ github.event.workflow_run.head_sha }}
-          docker compose -f docker-compose-stg.yml up -d
-        env:
-          COMPOSE_PROJECT_NAME: slotfinder-stg
-
   build-production:
     name: Build Production Images
-    needs: setup
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: self-hosted
     timeout-minutes: 20
