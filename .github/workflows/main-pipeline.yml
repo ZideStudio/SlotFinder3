@@ -119,7 +119,7 @@ jobs:
           echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
-        uses: orhun/git-cliff-action@5d3a6702d0a4ea1318aab88bd87a9d3df156eb0f # v2.13.1
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v2.13.1
         id: git-cliff
         with:
           config: cliff.toml
