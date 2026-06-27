@@ -119,24 +119,14 @@ jobs:
           echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
-        run: |
-          RANGE="${{ steps.version.outputs.range }}"
-          COMMITS=$(git log "${RANGE}" --pretty=format:"%s" --no-merges)
-
-          FEAT=$(echo "$COMMITS" | grep "^feat" | sed 's/^/- /' || true)
-          FIX=$(echo "$COMMITS" | grep "^fix" | sed 's/^/- /' || true)
-          PERF=$(echo "$COMMITS" | grep "^perf" | sed 's/^/- /' || true)
-          REFACTOR=$(echo "$COMMITS" | grep "^refactor" | sed 's/^/- /' || true)
-          OTHER=$(echo "$COMMITS" | grep -v "^feat\|^fix\|^perf\|^refactor" | sed 's/^/- /' || true)
-
-          BODY=""
-          [ -n "$FEAT" ]     && BODY="${BODY}## Features\n${FEAT}\n\n"
-          [ -n "$FIX" ]      && BODY="${BODY}## Bug Fixes\n${FIX}\n\n"
-          [ -n "$PERF" ]     && BODY="${BODY}## Performance\n${PERF}\n\n"
-          [ -n "$REFACTOR" ] && BODY="${BODY}## Refactoring\n${REFACTOR}\n\n"
-          [ -n "$OTHER" ]    && BODY="${BODY}## Other Changes\n${OTHER}\n\n"
-
-          printf "%b" "$BODY" > /tmp/changelog.md
+        uses: orhun/git-cliff-action@5d3a6702d0a4ea1318aab88bd87a9d3df156eb0f # v2.13.1
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ steps.version.outputs.new_tag }} --no-exec
+        env:
+          OUTPUT: /tmp/changelog.md
+          GITHUB_REPO: ${{ github.repository }}
 
       - name: Create tag and release
         env:
